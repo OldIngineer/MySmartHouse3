@@ -1,6 +1,7 @@
 	# MySmartHouse3
 Система "Умный дом" основанная на интерфейсе CAN/TWAI. В качестве контроллера устройств сети выбрана
 микросхема ESP32-C6.
+
 ПРОГРАММА: "controller_can"
 	Разработана и предназначена для "КОНТРОЛЛЕРА CAN" работающего в локальной сети на основе интерфейса CAN 2.0.
 	Контроллер работает на микросхеме ESP32-C6-WROOM-1-N8. Подключение к роутеру по интерфейсу Ethernet, через 
@@ -149,25 +150,38 @@ CONFIG_WS_BUFFER_SIZE=1024 //установлено по умолчанию
 CONFIG_MQTT_PROTOCOL_311=y //установлено по умолчанию
 CONFIG_MQTT_TRANSPORT_SSL=y //установлено по умолчанию
 CONFIG_MQTT_TRANSPORT_WEBSOCKET=y //установлено по умолчанию
-CONFIG_MQTT_TRANSPORT_WEBSOCKET_SECURE=y //установлено по	умолчанию
+CONFIG_MQTT_TRANSPORT_WEBSOCKET_SECURE=y //установлено по умолчанию
 ==============================================================
 ПРИМЕЧАНИЕ - Перед первой компиляцией необходимо задать целевое устройство: idf.py set-target esp32c6
 
 		Содержимое таблицы разбивки флеш-памяти
 ==============================================================
-	Смещение раздела прошивки должно быть выровнено на 64 КБ, начальные 36 КБ (9 секторов) зарезервированы для 
+
+Смещение раздела прошивки должно быть выровнено на 64 КБ, начальные 36 КБ (9 секторов) зарезервированы для 
 загрузчика и таблицы разделов.
-  Name,   	 Type, SubType, Offset,    Size,             Flags
+
+Name,   	 Type, SubType, Offset,    Size,             Flags
+  
 nvs,      	 data, nvs,     0x9000,    0x6000,24K,
+
 otadata,  	 data, ota,     0xf000,    0x2000,8K,
+
 phy_init, 	 data, phy,     0x11000,   0x1000,4K,
+
 ota_0,    	 app,  ota_0,   0x20000,   3000K,
+
 ota_1,    	 app,  ota_1,   0x310000,  3000K,
+
 profile,    data, nvs,     0x5FE000,  0x6000,24K,
+
 user_nvs, 	 data, nvs,     0x604000,  0x6000,24K,
+
 net_dev,    data, nvs,     0x60A000,  0x6000,24K,
+
 device1	 data, nvs,	0x610000,	0x6000,24K,
+
 ..................................................
+
 device63	 data, nvs,	0x784000,	0x6000,24K
 
 	Область памяти "nvs" предназначена для энергонезависимого хранения пар ключ-значение, в частности данных Wi-Fi.
@@ -187,7 +201,9 @@ device63	 data, nvs,	0x784000,	0x6000,24K
 		общих для сети CAN.
 	Область памяти "device1 -: device63" предназначена для энергонезависимого хранения пар ключ-значение для 
 		записи данных профилей устройств подключенных к сети CAN.
+		
 ==============================================================
+
 ПРИМЕЧАНИЕ - За основу взято:
 https://docs.espressif.com/projects/esp-jumpstart/en/latest/
 https://docs.espressif.com/projects/esp-idf/en/v5.4/esp32c6/api-guides/partition-tables.html
@@ -235,23 +251,29 @@ https://docs.espressif.com/projects/esp-idf/en/v5.4/esp32c6/api-guides/partition
   
 ПРИЛОЖЕНИЕ 4
 	СПИСОК ИСПОЛЬЗОВАННОЙ ЛИТЕРАТУРЫ И ПРИМЕРОВ
+	
 1 При написании программы обмена информацией по TWAI использовалось описание в ESP-IDF: 
 	https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/peripherals/twai.html
 	Описание компонента: https://github.com/espressif/esp-idf/tree/v5.4.1/components/driver/twai
 	А за основу взят пример из githab: 
 	https://github.com/espressif/esp-idf/tree/v5.4.1/examples/peripherals/twai/twai_network/twai_network_master
+	
 2 При написании программы подключения Ethernet через модуль по SPI использовалось описание в ESP-IDF: 
 	https://docs.espressif.com/projects/esp-idf/en/v5.4.1/esp32c6/api-reference/network/esp_eth.html
 	А за основу взят пример из githab: 
 	https://github.com/espressif/esp-idf/tree/v5.4.1/examples/ethernet/basic
+	
 3 При написании программы подключения (soket) TCP в качестве клиента использовалось описание: 
 	https://circuitlabs.net/tcp-socket-programming-basics/
 	А за основу взят пример из githab: 
 	https://github.com/espressif/esp-idf/tree/v5.4.1/examples/protocols/sockets/tcp_client
+	
 4 В дальнейшем предыдущая программа была переработана под неблокирующий сокет, при этом использовалось 
 	описание действий и пример в: https://circuitlabs.net/non-blocking-socket-i-o-with-esp-idf/
+	
 5 При написании программы обмена данными по беспроводному интерфейсу wss (websocket security)за основу взят 
 	пример: https://circuitlabs.net/websocket-client-implementation/
+	
 6 При написании программы клиента MQTT с подключением через протокол WebSocket Secure использовалось описание
 	ESP-IDF:
 	https://docs.espressif.com/projects/esp-idf/en/v5.4.2/esp32c6/api-reference/protocols/mqtt.html
