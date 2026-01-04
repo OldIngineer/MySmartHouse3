@@ -1,0 +1,19 @@
+#ИНДИВИДУАЛЬНЫЙ ПРОФИЛЬ УСТРОЙСТВА
+key,type,encoding,value
+d_inf,namespace,,
+#===ИНФОРМАЦИОННЫЙ СЕРВИС====
+#номер устройства в локальной сети CAN
+number,data,string,"04"
+#Серийный номер устройства				
+s/n,data,string,"00004"
+#Подчиненность
+obey,data,string,"slave_"
+#наименование контроллера
+name_d,data,string,"device_four"
+#присвоенное имя пользователем
+place,data,string,"hallway_door"
+#версия программы
+v_program,data,string,"v1"
+#перечисление функциональных типов
+type_c,data,string,"070 210 0A0 220#"
+#==================================

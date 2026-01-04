@@ -1,0 +1,15 @@
+idf_component_register(SRCS "app_main.c"
+				"app_init.c"
+				"ethernet.c"
+				"app_utilit.c"
+				"app_driver.c"
+				"app_mqtt_wss.c"
+				"message.c"
+				"CAN.c"
+				"MAKE_PARAMETR.c"
+				"TYPE.c"
+				"TYPE_0A0.c"
+				"TYPE_210.c"				
+	                INCLUDE_DIRS "."
+			EMBED_TXTFILES 				
+				"certs/wqtt.pem")
