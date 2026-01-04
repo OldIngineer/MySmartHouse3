@@ -132,28 +132,51 @@ nvs-память.
 
 ПРИЛОЖЕНИЕ 1
 		Содержимое файла sdkconfig.defaults:
+		
 ==============================================================
+
 CONFIG_IDF_TARGET="esp32c6"//используемый тип микросхемы
+
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y//размер флеш-памяти
+
 //--нижеперечисленное относится к разбивке флаш-памяти---
+
 CONFIG_PARTITION_TABLE_CUSTOM=y
+
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
 CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+
 CONFIG_PARTITION_TABLE_OFFSET=0x8000
+
 CONFIG_PARTITION_TABLE_MD5=y//наличие контрольной суммы для проверки таблицы
+
 //нижеперечисленное относится к ETHERNET
+
 CONFIG_ETH_ENABLED=y
+
 CONFIG_ETH_USE_SPI_ETHERNET=y
+
 CONFIG_ETH_SPI_ETHERNET_W5500=y
+
 //нижеперечисленное относится к Websocket
+
 CONFIG_WS_TRANSPORT=y //установлено по умолчанию
+
 CONFIG_WS_BUFFER_SIZE=1024 //установлено по умолчанию
+
 //нижеперечисленное относится к MQTT
+
 CONFIG_MQTT_PROTOCOL_311=y //установлено по умолчанию
+
 CONFIG_MQTT_TRANSPORT_SSL=y //установлено по умолчанию
+
 CONFIG_MQTT_TRANSPORT_WEBSOCKET=y //установлено по умолчанию
+
 CONFIG_MQTT_TRANSPORT_WEBSOCKET_SECURE=y //установлено по умолчанию
+
 ==============================================================
+
 ПРИМЕЧАНИЕ - Перед первой компиляцией необходимо задать целевое устройство: idf.py set-target esp32c6
 
 		Содержимое таблицы разбивки флеш-памяти
@@ -212,8 +235,11 @@ https://docs.espressif.com/projects/esp-idf/en/v5.4/esp32c6/api-guides/partition
 
 ПРИЛОЖЕНИЕ 2
 СОЗДАНИЕ ОБЛАСТИ ПАМЯТИ ХРАНЕНИЯ ДАННЫХ ПРОФИЛЯ УСТРОЙСТВА 
-	Откройте в главной директории проекта файл profile.csv с помощью редактора "блокнот", а если его нет создайте в соответствии с требованиями изложенными в https://github.com/espressif/esp-idf/tree/v5.4/components/nvs_flash/nvs_partition_generator
-файл с расширением .csv со следующим содержимым:
+
+	Откройте в главной директории проекта файл profile.csv с помощью редактора "блокнот", а если его нет создайте 
+	в соответствии с требованиями изложенными в 
+	https://github.com/espressif/esp-idf/tree/v5.4/components/nvs_flash/nvs_partition_generator
+	файл с расширением .csv со следующим содержимым:
 
 		key,type,encoding,value
 		d_inf,namespace,,		
@@ -241,7 +267,8 @@ https://docs.espressif.com/projects/esp-idf/en/v5.4/esp32c6/api-guides/partition
 
 ПРИЛОЖЕНИЕ 3
 		НАСТРОЙКИ И РАБОТА С ПРОТОКОЛОМ MQTT
-1 Соединение с брокером осуществляется согласно беспроводному протоколу WSS (Web Socket Secure).
+		
+	Соединение с брокером осуществляется согласно беспроводному протоколу WSS (Web Socket Secure).
 	Адрес в интернете (uri), порт, сертификат, имя пользователя, пароль, идентификационный номер клиента 
 	- предоставляется брокером и записывается в программе, файл "app_mqtt_wss.c" конфигурация mqtt.
 	Кроме того в конфигурацию mqtt заносятся следующие настройки:
