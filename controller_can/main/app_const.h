@@ -52,6 +52,7 @@
 #define WAIT_TAKE_IP        8000//время задержки на получение адреса Ip от роутера
     //======= MQTT WSS CLIENT=======================
 #define BROKER_URI  "wss://m3.wqtt.ru:13108/wss"//адрес брокера mqtt
-#define USER_NAME   "u_RHHRIQ"//имя пользователя
-#define ID_CLIENT   "18150"//идентификационный номер клиента
-#define PASSWORD    "S3czh8Qp"//пароль
+#define USER_NAME   "user"//имя пользователя
+#define ID_CLIENT   "12345"//идентификационный номер клиента
+
+#define PASSWORD    "PassWord"//пароль
