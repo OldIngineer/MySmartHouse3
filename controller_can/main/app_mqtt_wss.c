@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include "driver/gpio.h"
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "nvs_flash.h"
@@ -36,7 +37,13 @@ extern const uint8_t wqtt_pem_start[]    asm("_binary_wqtt_pem_start");
 extern const uint8_t wqtt_pem_end[]    asm("_binary_wqtt_pem_end");
 extern uint8_t msg_for_mqtt;//флаг сформированного сообщения для передачи брокеру mqtt
 extern char topic_on[40];//строка топика для передачи брокеру mqtt
-extern char data_on[40];//строка данных для передачи брокеру mqtt
+extern char data_on[200];//строка данных для передачи брокеру mqtt
+extern uint8_t flag_cont;//флаг внешнего соединения
+        //0 - отсутствие соединения
+        //1 - соединение с брокером mqtt
+extern uint8_t flag_mode;//флаг режима работы
+extern uint8_t array_member;//порядковый номер члена массива в котором хранятся 
+                            //локальные номера подчиненных устройств.
 
 // Обработчик событий для MQTT-событий
  static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
@@ -55,11 +62,17 @@ extern char data_on[40];//строка данных для передачи бр
         ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
         //запрос клиента на подписку топиков команд
         msg_id = esp_mqtt_client_subscribe(client, "com/#", 1);
-        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);       
+        ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
+        flag_cont = 1;//выставить флаг контакта с брокером mqtt 
+        gpio_set_level(LED_ALARM, 0);
+        array_member = 0;
+        flag_mode = 16;//передачи данных профилей устройств  
         break;
     case MQTT_EVENT_DISCONNECTED://клиент разорвал соединение например:
     // из-за недоступности брокера
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        flag_cont = 0;//снять флаг контакта с брокером mqtt
+        gpio_set_level(LED_ALARM, 1);
         break;
     case MQTT_EVENT_SUBSCRIBED://Брокер подтвердил запрос клиента на подписку
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
@@ -79,6 +92,8 @@ extern char data_on[40];//строка данных для передачи бр
         break;
     case MQTT_EVENT_ERROR://Клиент столкнулся с ошибкой
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+        flag_cont = 0;//снять флаг контакта с брокером mqtt
+        gpio_set_level(LED_ALARM, 1);
         break;
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);
