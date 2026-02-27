@@ -8,8 +8,10 @@ idf_component_register(SRCS "app_main.c"
 				"CAN.c"
 				"MAKE_PARAMETR.c"
 				"TYPE.c"
+				"TYPE_070.c"
 				"TYPE_0A0.c"
-				"TYPE_210.c"				
-	                INCLUDE_DIRS "."
-			EMBED_TXTFILES 				
+				"TYPE_210.c"
+				"TYPE_220.c"
+	        INCLUDE_DIRS "."
+			EMBED_TXTFILES 
 				"certs/wqtt.pem")
