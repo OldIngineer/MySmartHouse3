@@ -7,9 +7,8 @@
 //предназначена для хранения пар ключ-значение во флэш-памяти
 #include <nvs_flash.h>
 
-
-extern uint8_t tab_type[0x400];//таблица где номер ячейки это код типа, а содержимое
-    // - порядковый номер типа функциональности как он указан в инф.сервисе
+extern char number[3];//массив в котором хранится локальный номер устройства
+extern uint16_t tabl_type[64][9];//таблица ячейки которой содержат код типа функциональности
 extern const char namespase[64][10];//Пространство имен устройств в nvs-памяти
 extern const char namespase_type[9][6];//Пространство имен для для записи
                                        // сервиса функциональности устройства
@@ -18,6 +17,9 @@ extern const char namespace_value_par[9][10];//Пространство имен
 extern const char namespace_name[9][6];//Пространство имен для записи имен сервиса
 extern const char namespace_name_par[9][7];//Пространство имен для записи имен параметров
 extern const char namespace_script[17][9];//Пространство имен для записи сценариев
+extern uint8_t sum_par;//суммарное число параметров в данном сервисе типа
+extern uint8_t number_slaves[MAX_MEMBERS];//массив в котором хранятся локальные номера
+         //подчиненных устройств, а в нулевой ячейке число подключенных устройств
 
 //Функция преобразования числа в шестнадцатиричном коде представленного
 // в символьном отображении в двоичный код размерностью 32 бита(тип long)
@@ -60,13 +62,13 @@ void form_cadr(uint8_t num_cadra, char *str)
     byfer_can[num_cadra][(size-1)-i] = str[i];    
   }
     byfer_can[0][0]++;//счетчик кадров увеличен на 1
-  /*
+  
   printf("byfer_can[%d]: %d %d %d %d %d %d %d %d %d\n",
      num_cadra, byfer_can[num_cadra][8], byfer_can[num_cadra][7],
      byfer_can[num_cadra][6], byfer_can[num_cadra][5], byfer_can[num_cadra][4],
      byfer_can[num_cadra][3], byfer_can[num_cadra][2], byfer_can[num_cadra][1],
      byfer_can[num_cadra][0]);
-  */   
+     
 }
 //Функция преобразования строки в несколько кадров данных
 void form_many_cadr(uint8_t num_cadr, char *str) 
@@ -80,13 +82,16 @@ void form_many_cadr(uint8_t num_cadr, char *str)
   char str4[8] = {r[3][0],r[3][1],r[3][2],r[3][3],r[3][4],r[3][5],r[3][6],0}; 
   //printf("String: %s,%s,%s,%s,\n",str1,str2,str3,str4);
   uint8_t len = strlen(str);//размер строки без нулевого байта
-  if(len<15) {
+  if(len<8) { //если зарезервировано два кадра
+    form_cadr(num_cadr, str1);
+    char *s = "\0";
+    form_cadr(num_cadr+1, s);
+  }
+  if(len>7) {
     form_cadr(num_cadr, str1);
     form_cadr((num_cadr+1), str2);
   }
   if(len>14) {
-    form_cadr(num_cadr, str1);
-    form_cadr((num_cadr+1), str2);
     form_cadr((num_cadr+2), str3);
   }
   if(len>21) {
@@ -107,20 +112,20 @@ for(uint8_t i=1; i<=byfer_can[0][0]; i++) {
         //byfer_can[i][n] = 0;//номер строки далее не нужен - удалить
         break;
       }
-    }
+    }    
     if(i!=n_str) {
     bul = 0;//признак ошибки
     break;
     }
-  }
+  }  
   //если есть  признак окончания данных и нет ошибки при приеме
   if((byfer_can[0][1]==1)&&(bul==1)) return 1;
   else return 0;  
 }
 //Функция записи/чтения в nvs-память измененых данных типа устройства, где:
-  //num_div - локальный номер устройства, если запись в профиль данного устройства то =255;
+  //num_div - локальный номер устройства
   //type - код типа ввиде шестнадцатиричного кода;
-  //theme - тип данных: 'p' параметр, 'n' имя; 's' сценарий;
+  //theme - тип данных: 'p' параметр, 't' наименование параметра, 'n' имя; 's' сценарий;
   //ordinal - порядковый номер (параметра, сценария, имени);
   //data - данные которые надо записать/прочитать;
   //wr - признак записи (1), чтения (0).
@@ -129,50 +134,36 @@ char *change_profile_nvs(uint8_t num_div, uint16_t type,
 {
   esp_err_t ret;
   nvs_handle_t my_handle;
-  size_t required_size;
-  uint8_t i = tab_type[type];//порядковый номер типа функциональности как он указан в инф.сервисе
-  if(num_div == 255) {
-    //инициализация раздела флеш-памяти "profile"
-    ret = nvs_flash_init_partition("profile");
-    //если не хватает памяти или ошибка при инициализации
-    if (ret==ESP_ERR_NVS_NO_FREE_PAGES||ret==ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ret = nvs_flash_erase_partition("profile");
-        /* Retry nvs_flash_init */
-        ret = nvs_flash_init_partition("profile");
-    }
-    if (ret != ESP_OK) {
-        printf("Failed to init NVS-profile");
-        return 0;
-    }
-      //открытие раздела флеш-памяти "profile" с пространством имен  типа "type*"                
-      ret = nvs_open_from_partition("profile", namespase_type[i+1],
-                NVS_READWRITE, &my_handle);
-      if (ret != ESP_OK) {
-        printf("Failed open NVS, error code: %i\n",ret);
-        return 0;
-      }
-  } else {
+  size_t required_size;  
+  uint8_t i;//порядковый номер типа функциональности как он указан в инф.сервисе
+  for(i=0; i<=9; i++) {
+    if(tabl_type[num_div][i] == type) break;    
+  }
+  if(i==9) return '\0';//нет такого типа выход из п/п
+  
     //инициализация раздела флеш-памяти "device*"
     ret = nvs_flash_init_partition(namespase[num_div]);
-    //если не хватает памяти или ошибка при инициализации
-    if (ret==ESP_ERR_NVS_NO_FREE_PAGES||ret==ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ret = nvs_flash_erase_partition(namespase[num_div]);
-        /* Retry nvs_flash_init */
-        ret = nvs_flash_init_partition(namespase[num_div]);
-    }
-    if (ret != ESP_OK) {
-        printf("Failed to init NVS-profile");
-        return 0;
-    }
     //открытие раздела флеш-памяти "device*" с пространством имен  типа "type*"
-    ret = nvs_open_from_partition(namespase[num_div], namespase_type[i+1],
+    ret = nvs_open_from_partition(namespase[num_div], namespase_type[i],
                 NVS_READWRITE, &my_handle);
     if (ret != ESP_OK) {
-        printf("Failed open NVS, error code: %i\n",ret);
+        printf("Failed open NVS 8\n");
         return 0;
     }
+  if(theme == 'n') {//тип данных: 'n' имя
+    if(wr == 1) {
+      //запись в nvs-память
+      nvs_set_str(my_handle,namespace_name[ordinal], data);
+      nvs_commit(my_handle);//проверка записи в память
+    } else {
+      //чтение из nvs-памяти
+      //размер получаемых данных не фиксирован
+      nvs_get_str(my_handle,namespace_name[ordinal],NULL,&required_size);
+      char* name = malloc(required_size);
+      nvs_get_str(my_handle,namespace_name[ordinal],name,&required_size);
+      strcpy(data, name);//копирование прочитанных данных
+    }
+
   }
   if(theme == 'p') {//тип данных: 'p' параметр
     if(wr == 1) {
@@ -186,6 +177,23 @@ char *change_profile_nvs(uint8_t num_div, uint16_t type,
       char* value = malloc(required_size);
       nvs_get_str(my_handle,namespace_value_par[ordinal],value,&required_size);
       strcpy(data, value);//копирование прочитанных данных
+    }
+  }
+  if(theme == 't') {//тип данных: 't' наименование параметра
+    if(wr == 1) {
+    //запись в nvs-память
+    nvs_set_str(my_handle,namespace_name_par[ordinal], data);
+    nvs_commit(my_handle);//проверка записи в память
+    } else {
+      //чтение из nvs-памяти
+      //размер получаемых данных не фиксирован
+      nvs_get_str(my_handle,namespace_name_par[ordinal],NULL,&required_size);
+      char* name_par = malloc(required_size);
+      nvs_get_str(my_handle,namespace_name_par[ordinal],name_par,&required_size);
+      strcpy(data, name_par);//копирование прочитанных данных
+      if(strcmp(data,"#")==0) {
+        sum_par = ordinal - 1;
+      }
     }
   }
   if(theme == 's') {//тип данных: 's' сценарий
@@ -204,4 +212,114 @@ char *change_profile_nvs(uint8_t num_div, uint16_t type,
   nvs_close(my_handle);//закрытие памяти
   return (data);//возврат считанного значения
 }
- 
+// Функция получения из флеш памяти устройства "мастер" перечня
+//  кодов функциональности устройства и запись их таблицу "tabl_type[][]"
+    //loc_num_dev - локальный номер устройства
+uint8_t list_type_device(uint8_t loc_num_dev) 
+{
+   //обнуление строки таблицы
+   for(uint8_t i=0; i<9; i++) {
+    tabl_type[loc_num_dev][i] = 0;
+   }
+  //чтение из памяти nvs перечня кодов функциональности подчиненного устройства
+  char data[40];    
+  char *list_type = change_profile_nvs(loc_num_dev,0x000,'n',7,data,0);            
+ //разделить список на коды типов функциональности для данного устройства
+ //если последний символ "#", удалить его
+ if(strlen(list_type)>0 && list_type[strlen(list_type)-1]=='#') {
+     list_type[strlen(list_type)-1] = '\0';
+ }
+ char *cod_typ;
+ cod_typ = strtok(list_type, " ");//код первого типа
+ // Перебираем строку для извлечения всех остальных кодов типа
+  uint8_t k = 1;
+ while (cod_typ != NULL && k<10) {
+     tabl_type[loc_num_dev][k] = strtol(cod_typ, NULL, 16);               
+     printf("tabl_type[%d][%d]: %d\n",loc_num_dev,k,tabl_type[loc_num_dev][k]);
+     cod_typ = strtok(NULL, " ");//следующий код типа
+     k++;
+ }
+ return k-1;
+}
+// Функция записи во флеш память таблицы "tabl_type[][]"
+//  ячейки которой содержат код типа функциональности
+//  для 63 устройств сети по 9 типам (включая инф. сервис (0)).
+//Запись производится ввиде строки, где коды типа для одного устройства
+// отделяются пробелами, а ключ имя устройства
+void write_tabl_type_flash() 
+{  
+  //инициализация раздела флеш-памяти "device"
+  esp_err_t ret = nvs_flash_init_partition("net_dev");
+  if (ret != ESP_OK) {
+    printf("Failed to init NVS net_dev\n");
+    return;
+  }
+  nvs_handle_t my_handle;
+  //открыть пространсво имен общее для подчиненных устройств
+  ret = nvs_open_from_partition("net_dev", "general",
+     NVS_READWRITE, &my_handle);
+  if (ret != ESP_OK) {
+    printf("Failed open NVS, error code: %i\n",ret);
+    return;
+  } 
+  uint8_t d;
+  char str_tabl_type[33];//строка перечисления кодов типа для одного устройства  
+  for(uint8_t i=0; i<=number_slaves[0]; i++) {   
+    str_tabl_type[0] = '\0'; strcat(str_tabl_type,"0 ");
+    d = number_slaves[i];
+    if(i==0) d = htol(number);
+    for(uint8_t k=1; k<9; k++) {
+      char str_type[5];
+      sprintf(str_type,"%X",tabl_type[d][k]);
+      strcat(str_tabl_type, str_type);
+      strcat(str_tabl_type, " ");
+    }
+    printf("Device[%d], list type: %s\n",d,str_tabl_type);
+    nvs_set_str(my_handle,namespase[d],str_tabl_type);   
+  } 
+  nvs_commit(my_handle);//проверка записи в память
+  nvs_close(my_handle);//закрытие памяти 
+}
+// Функция чтения из флеш памяти данных таблицы "tabl_type[][]"
+void read_tabl_type_flash()
+{
+  //инициализация раздела флеш-памяти "device"
+  esp_err_t ret = nvs_flash_init_partition("net_dev");
+  if (ret != ESP_OK) {
+    printf("Failed to init NVS net_dev\n");
+   return;
+  }
+  nvs_handle_t my_handle;
+  //открыть пространство имен общее для подчиненных устройств
+  ret = nvs_open_from_partition("net_dev", "general",
+   NVS_READONLY, &my_handle);
+  if (ret != ESP_OK) {
+    printf("Failed open NVS, error code: %i\n",ret);
+    return;
+  }
+  char str_tabl_type[33]; 
+  size_t required_size = 33;
+  char *ct;
+  char name_dev[10];
+  for(uint8_t i=0; i<=number_slaves[0]; i++) {
+    if(i==0) strcpy(name_dev, namespase[htol(number)]);
+    else strcpy(name_dev, namespase[number_slaves[i]]);
+    // По умолчанию при первом чтении читается следующее:
+    strcpy(str_tabl_type, "0 0 0 0 0 0 0 0 0");
+    nvs_get_str(my_handle,name_dev,str_tabl_type,&required_size);
+    printf("%s, list type: %s\n",name_dev,str_tabl_type);
+    //разобрать строку кодов типа
+    ct = strtok(str_tabl_type, " ");
+    tabl_type[number_slaves[i]][0] = htol(ct);//код первого типа
+    //printf("%d\n", tabl_type[number_slaves[i]][0]);
+    uint8_t k = 1;
+    // Перебираем строку для извлечения всех остальных кодов типа
+    while (ct != NULL && k<9) {      
+      ct = strtok(NULL, " ");//следующий код типа
+      tabl_type[number_slaves[i]][k] = htol(ct);
+      //printf("%d\n", tabl_type[number_slaves[i]][k]);
+      k++;
+    }
+  }
+  nvs_close(my_handle);//закрытие памяти 
+}
