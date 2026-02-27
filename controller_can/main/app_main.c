@@ -30,6 +30,8 @@
 #include "esp_eth.h"
 #include "esp_event.h"
 #include "sdkconfig.h"
+//управление таймером
+//#include "driver/timer.h"
 
 //==========объявление глобальных переменных =========================
 char number[3];//массив в котором хранится локальный номер устройства
@@ -45,9 +47,15 @@ uint8_t flag_mode = 0;//флаг режима работы
     //признак наличия команды из вне системы =5;
     //признак получения сценария/имени =6;
     //признак отправки в CAN сценария/имени =7;
-
+    //признак режима передачи данных инф.профилей устройств =8;
+    //признак режима передачи данных типа функциональности устройств =9;
     //признак изменение контролируемых сигналов на входе устройства = 10;
     //подтверждение исполнения команды от сценария или от мастера = 11, 12;
+    //признак чтения сервиса подключенного к сети устройства = 13;
+    //признак ожидания/передачи данных от запрашиваемого сервиса = 14;
+    //признак запроса данных сервисов подчиненных устройств = 15;
+		//признак режима передачи данных типов функциональности всех устройств сети=16;
+
 uint8_t number_slaves[MAX_MEMBERS];//массив в котором хранятся локальные номера
          //подчиненных устройств, а в нулевой ячейке число подключенных устройств
 uint8_t array_member = 1;//порядковый номер члена массива в котором хранятся 
@@ -69,7 +77,7 @@ const char namespase[64][10] = {"net_dev","device1","device2","device3","device4
     "device48","device49","device50","device51","device52","device53","device54",
     "device55","device56","device57","device58","device59","device60","device61",
     "device62","device63"};
-//Пространство имен для для записи сервиса функциональности устройства
+//Пространство имен для записи сервиса функциональности устройства
 const char namespase_type[9][6] = {"d_inf", "type1", "type2", "type3", "type4",
      "type5", "type6", "type7", "type8"};
 //Пространство имен для записи величины параметров
@@ -92,8 +100,11 @@ uint32_t tab_param[8][9];//таблица параметров:младшие 2 
       //tab_param[*][0] - код типа функциональности
 uint64_t tab_event[8][17];//таблица событий
 uint32_t tab_make[8][17];//таблица исполнения
-uint8_t tab_type[0x400];//таблица где номер ячейки это код типа, а содержимое
-    // - порядковый номер типа функциональности как он указан в инф.сервисе
+uint16_t tabl_type[64][9];//таблица ячейки которой содержат код типа функциональности
+        //для 63 устройств сети по 9 типам (включая инф. сервис (0))
+        //в порядке перечисления в инф.сервисе устройства
+int8_t ord_tab_type;//порядковый номер текущего кода типа (для передачи данных сервисов, мастер)
+uint16_t type_func;//код сервиса для отправки в TWAI подчиненым устройством
 uint32_t param_change;//дискриптор флага изменения параметра
 uint32_t buf_proof[2];//буфер подтверждения хранения события изменения параметра для передачи в CAN,
                     // 0 ячейка код типа функциональности,
@@ -106,8 +117,15 @@ uint8_t err = 1;//для внесения ошибок при отладке
 //----------------- MQTT ---------------------------------------------
 uint8_t msg_for_mqtt = 0;//флаг сформированного сообщения для передачи брокеру mqtt
 char topic_on[40];//строка топика для передачи брокеру mqtt
-char data_on[40];//строка данных для передачи брокеру mqtt
+char data_on[200];//строка данных для передачи брокеру mqtt
+uint8_t flag_cont = 0;//флаг внешнего соединения
+        //0 - отсутствие соединения
+        //1 - соединение с брокером mqtt
 //====================================================================
+uint8_t ordinal;//порядковый номер (параметра, сценария, имени);
+uint8_t sum_par = 8;//сумма передаваемых параметров
+uint8_t flag_event = 1;//флаг разрешения формирования событий в CAN от датчиков
+
 //объявление дескрипторов задач
 TaskHandle_t TaskHandleTwaiReceive = NULL;
 TaskHandle_t TaskHandleTwaiTransmit = NULL;
@@ -126,7 +144,9 @@ typedef struct {
         TX_ANSWER_SERVICE,
         TX_CHANGE_PARAMETR,
         TX_COM_CADR,
-        TX_NAME_SCRIPT
+        TX_NAME_SCRIPT,
+        TX_EVENT_YES,
+        TX_EVENT_NO
     } tx_task_action;//перечисление для передачи сообщений
     uint8_t local_number;
     uint16_t code_type;
@@ -155,33 +175,63 @@ static void twai_receive_task(void *arg)
             twai_message_t rx_msg;
             //блокировка на время получения сообщения                
                 twai_receive(&rx_msg, pdMS_TO_TICKS(WAIT_CAN/BAUD_RATE));
-                twai_clear_receive_queue ();//очистить очередь приема                 
-        if((rx_msg.extd)&&(rx_msg.data_length_code == 3)&&flag_mode==0){ 
+                twai_clear_receive_queue ();//очистить очередь приема
+
+        if((rx_msg.extd)&&(rx_msg.data_length_code == 3)&&
+            (flag_mode==0)&&!rx_msg.rtr) { 
         uint64_t id =  rx_msg.identifier;      
         uint64_t event = rx_msg.data[0] + (rx_msg.data[1] << 8) + 
                 (rx_msg.data[2] << 16) + (id << 24);                
         uint32_t ident = rx_msg.identifier;
         uint16_t val_par = rx_msg.data[0] + (rx_msg.data[1] << 8);
         uint8_t n_cadr = rx_msg.data[2];
+
         //если старший бит идентификатора =1 (изменение), 0 в 18р (признак записи) 
-        if((rx_msg.identifier&0x10000000)&&!(rx_msg.identifier&0x20000)) {
+        if((rx_msg.identifier&0x10000000)&&!(rx_msg.identifier&0x20000)) {        
            // вызов функции изменения параметра
            com_processing(ident, val_par, n_cadr);
-        } else event_processing(event);//обработка события
+        }
+        //если старший бит идентификатора =0, 1 в 18р (признак чтения) 
+        if(!(rx_msg.identifier&0x10000000)&&(rx_msg.identifier&0x20000)) {
+            event_processing(event);//обработка события
+        }
         }       
         //ЕСЛИ ПОДЧИНЕННОСТЬ SLAVE
         if(strcmp(obey,"master")!=0) 
         {
+            printf("Identifier: %ld\n", rx_msg.identifier);
             //пришел идентификатор обзора сети  
-            if ((rx_msg.identifier == ID_MASTER_REVIEW)&&(rx_msg.extd==0)) { 
+            if ((rx_msg.identifier == ID_MASTER_REVIEW)&&(rx_msg.extd==0)&&
+								(rx_msg.data_length_code == 1)&&!rx_msg.rtr) { 
                 //запомнить локальный номер "master"
-                number_master = (rx_msg.data[2]<<16) + (rx_msg.data[1]<<8) + rx_msg.data[0]; 
+                number_master = (rx_msg.data[2]<<16) + (rx_msg.data[1]<<8) + rx_msg.data[0];
+                flag_event = 0;//запрет формирования событий от датчиков 
                     flag_mode = 1;//признак сканирования
                 }
             //пришел идентификатор запроса чтения инф.сервиса
             if((rx_msg.extd==1)&&(rx_msg.identifier==
-                (htol(number)+(ID_MASTER_REVIEW<<18)))&&rx_msg.rtr) {
+                (htol(number)+(ID_MASTER_REVIEW<<18)))&&rx_msg.rtr&&
+                (rx_msg.data_length_code == 0)) {
                     flag_mode = 3;//признак отправки инф.сервиса
+                }
+            //пришел идентификатор разрешения формирования событий от датчиков
+            if((rx_msg.identifier == ID_MASTER_REVIEW)&&(rx_msg.extd==0)&&
+				(rx_msg.data_length_code == 0)&&rx_msg.rtr) {
+                    flag_event = 1;
+                }
+            //пришел идентификатор запрета формирования событий от датчиков
+            if((rx_msg.identifier == ID_MASTER_REVIEW)&&(rx_msg.extd==0)&&
+	                (rx_msg.data_length_code == 0)&&!rx_msg.rtr) {
+                flag_event = 0;
+            }
+            //пришел идентификатор запроса чтения сервиса
+            if((rx_msg.extd==1)&&(rx_msg.identifier&0x10000000)&&
+                ((rx_msg.identifier>>18)!=ID_MASTER_REVIEW)&&
+                ((rx_msg.identifier&0xFF)==htol(number))&&rx_msg.rtr&&
+                (rx_msg.data_length_code == 0)) {
+                    //printf("ky-ky\n");
+                    type_func = (rx_msg.identifier>>18) - 0x400;//код сервиса
+                    flag_mode = 13;//признак отправки сервиса
                 }
             //пришел идентификатор записи имени/сценария (данных > 3)
             if(rx_msg.extd&&(rx_msg.data_length_code > 3)&&(flag_mode==0)&&
@@ -232,6 +282,30 @@ static void twai_receive_task(void *arg)
                     byfer_can[0][1] = 1;
                 }
             }
+            //если признак ожидания данных сервиса, расширенный идентификатор 
+            //с базовой частью не "ID_MASTER_REVIEW"+ признак чтения + лок.номер
+            // + 1 в старшем разряде идентификатора
+            if((flag_mode==14)&&(rx_msg.extd==1)&&
+            ((rx_msg.identifier>>18)!=ID_MASTER_REVIEW)&&
+            ((number_slaves[array_member]+(1<<17))==(rx_msg.identifier&0x3FFFF))&&
+            (rx_msg.identifier&0x10000000)) {
+                byfer_can[0][0]++;
+                //запись в буфер полученного кадра данных
+                for(int i=0; i<8; i++) {
+                    byfer_can[byfer_can[0][0]][i] = rx_msg.data[i];
+                }
+    
+                 printf("byfer_can[%d]: %d %d %d %d %d %d %d %d\n",
+    byfer_can[0][0], byfer_can[byfer_can[0][0]][7],
+    byfer_can[byfer_can[0][0]][6], byfer_can[byfer_can[0][0]][5], byfer_can[byfer_can[0][0]][4],
+    byfer_can[byfer_can[0][0]][3], byfer_can[byfer_can[0][0]][2], byfer_can[byfer_can[0][0]][1],
+    byfer_can[byfer_can[0][0]][0]);
+    
+                //если в конце кадра # это означает окончание приема данных
+                if(rx_msg.data[0]=='#') {
+                    byfer_can[0][1] = 1;
+                }
+            }
             //если режим ожидания и расширенный идентификатор
             if((flag_mode==0)&&(rx_msg.extd==1)) {                
                 //сформировать сообщение для MQTT
@@ -272,12 +346,14 @@ static void twai_transmit_task(void *arg)
             message_t_CAN(ext, echo, ident, len, data_transmit);//кадр данных в CAN            
         }
         if (tx_message.tx_task_action == TX_QUERY_SERVICE) {
-            //идентификатор адресуемых устройств
+            uint32_t ext = 1;//расширенный идентификатор
+            //идентификатор адресуемых устройств            
             uint32_t ident = tx_message.local_number + (0<<17) 
                             + (tx_message.code_type<<18);
             uint32_t echo = 0;//сообщение многократное(при ошибке)
-            //printf("TX_QUERY_SERVICE -ident: %ld\n",ident);
-            remote_frame(echo, ident);//кадр запроса сервиса             
+            uint8_t len = 0;//длина данных
+            //printf("TX_QUERY_SERVICE -ident: %ld\n",ident);           
+            remote_frame(ext, echo, ident, len);            
         }
         if(tx_message.tx_task_action == TX_ANSWER_SERVICE) {
             //Передача кадра данных по интерфейсу CAN - данные сервиса
@@ -293,7 +369,7 @@ static void twai_transmit_task(void *arg)
                 uint64_t ky = byfer_can[tx_message.number_cadr][i];
                 data_transmit = data_transmit + (ky<<(i*8));
             }
-            //printf("Cadr %d: data-%lld, ident-%ld\n", tx_message.number_cadr, data_transmit, ident);
+            printf("Cadr %d: data-%lld, ident-%ld\n", tx_message.number_cadr, data_transmit, ident);
             message_t_CAN(ext, echo, ident, len, data_transmit);//кадр данных в CAN
         }
         if(tx_message.tx_task_action == TX_CHANGE_PARAMETR) {
@@ -336,6 +412,23 @@ static void twai_transmit_task(void *arg)
             //printf("Cadr %d: data-%lld, len-%d, ident-%ld\n",tx_message.number_cadr,data_transmit,len,ident);
             message_t_CAN(ext, echo, ident, len, data_transmit);//кадр данных в CAN
         }
+        if(tx_message.tx_task_action == TX_EVENT_YES) {
+            //Разрешение событий от датчиков в сети CAN
+            uint32_t ext = 0;//базовый идентификатор
+            uint32_t echo = 0;//сообщение многократное(при ошибке)
+            uint32_t ident = ID_MASTER_REVIEW;//идентификатор адресуемых устройств
+            uint8_t len = 0;//длина данных 
+            remote_frame(ext, echo, ident, len);//кадр запроса                    
+        }
+        if(tx_message.tx_task_action == TX_EVENT_NO) {
+            //Запрещение событий от датчиков в сети CAN
+            uint32_t ext = 0;//базовый идентификатор
+            uint32_t echo = 0;//сообщение многократное(при ошибке)
+            uint32_t ident = ID_MASTER_REVIEW;//идентификатор адресуемых устройств
+            uint8_t len = 0;//длина данных
+            uint64_t data_transmit = 0;
+            message_t_CAN(ext, echo, ident, len, data_transmit);//кадр данных в CAN  
+        }
         xSemaphoreGive(ctrl_task_sem);//передача семафора
     }
     vTaskDelete(NULL);
@@ -377,28 +470,15 @@ static void ctrl_task(void *arg)
         xSemaphoreTake(ctrl_task_sem, portMAX_DELAY);
         num_retry--;
         param_change = num_par + (num_type << 8) + (num_retry << 16);
-        vTaskDelay(3);//задержка, 1 тик = 10мс
+        //если устройство мастер, отправить топик
+        if(strcmp(obey,"master")==0) {
+            data_service_on_mqtt(htol(number), num_type, 'p', num_par);
+        }
+        vTaskDelay(1);//задержка, 1 тик = 10мс
         } else flag_mode = 0;
       }
-      if(flag_mode == 12) {//подтверждение исполнения команды от сценария или от мастера
-        tx_message.tx_task_action = TX_CHANGE_PARAMETR;
-        tx_message.local_number = htol(number);//преобразование номера
-        tx_message.code_type = buf_proof[0];
-        tx_message.num_param = (buf_proof[1]>>16) & 0xFF;
-        tx_message.value_param = buf_proof[1] & 0xFFFF;       
-        //выставить запрос в очередь
-        xQueueSend(tx_task_que, &tx_message, portMAX_DELAY);
-        //ожидание получения семафора от задачи передачи сообщений в CAN
-        xSemaphoreTake(ctrl_task_sem, portMAX_DELAY);
-        flag_mode = 0;
-      }
-      if(flag_mode == 11) {//задержка исполнения
-        vTaskDelay(pdMS_TO_TICKS(2*WAIT_CAN/BAUD_RATE));
-        flag_mode = 12;
-      }
       //ЕСЛИ УСТРОЙСТВО МАСТЕР
-      if(strcmp(obey,"master")==0) 
-      {  
+      if(strcmp(obey,"master")==0) {  
          //чтение сообщений от TWAI
          if(flag_mode==0) twai_read_alerts(&alerts,0);
          if(alerts & TWAI_ALERT_ABOVE_ERR_WARN) {
@@ -421,7 +501,10 @@ static void ctrl_task(void *arg)
             retry = RETRY;//задать максимальное число повторов
             //стиреть флеш-память отведенную под профили подчиненных устройств
             for(uint8_t i=0; i<64; i++) {
-                esp_err_t ret = nvs_flash_erase_partition(namespase[i]);
+                esp_err_t ret;
+                if(i!=htol(number)) {//только не для этого устройства
+                    ret = nvs_flash_erase_partition(namespase[i]);
+                }                
                 if (ret != ESP_OK) {
                     printf("Failed to erase NVS-prof_device!\n");
                 }
@@ -431,14 +514,20 @@ static void ctrl_task(void *arg)
             for(int i=0; i<MAX_MEMBERS; i++) {
                 number_slaves[i] = 0;
             }
-            flag_mode = 2;//признак ожидания ответов сканирования
+            //выставить в сеть разрешение формирования событий от датчиков
+            tx_message.tx_task_action = TX_EVENT_NO;
+            //выставить запрос в очередь
+            xQueueSend(tx_task_que, &tx_message, portMAX_DELAY);
+            //ожидание получения семафора от задачи передачи сообщений в CAN
+            xSemaphoreTake(ctrl_task_sem, portMAX_DELAY);
             //послать запрос сканирования сети
             tx_message.tx_task_action = TX_REVIEW;
             //выставить запрос в очередь
             xQueueSend(tx_task_que, &tx_message, portMAX_DELAY);
             //ожидание получения семафора от задачи передачи сообщений в CAN
             xSemaphoreTake(ctrl_task_sem, portMAX_DELAY);
-            //printf("Semafor: from SEND\n"); 
+            //printf("Semafor: from SEND\n");
+            flag_mode = 2;//признак ожидания ответов сканирования 
         } 
         if(flag_mode == 2) { //признак ожидания ответов сканирования 
             //если истекло максимальное время ответов от сети               
@@ -481,6 +570,30 @@ static void ctrl_task(void *arg)
             byfer_can[0][0] = 0;//обнулить счетчик приема кадров данных
             byfer_can[0][1] = 0;// обнулить признак конца данных
         }
+        //признак режима передачи данных инф.профилей устройств
+        if(flag_mode == 8) {
+            if(array_member == 0) {
+                //информационный профиль мастера
+                data_service_on_mqtt(htol(number), 0, 'n', ordinal);
+                ordinal++;
+                if(ordinal>7) {
+                ordinal = 1;
+                array_member = 1;
+                }
+            } else {//информационные профили подчиненных устройств             
+                data_service_on_mqtt(number_slaves[array_member], 0, 'n', ordinal);
+                ordinal++;
+                if((ordinal>7)&&(array_member<number_slaves[0])) {
+                    array_member++;
+                    ordinal = 1;
+                }
+                if((ordinal>7)&&(array_member>=number_slaves[0])) {//окончание
+                    array_member = 1;
+                    flag_mode = 15;
+                    //flag_mode = 0;
+                }
+            }
+        }
         //признак ожидания информационного сервиса
         if(flag_mode == 4) { 
             //если истекло максимальное время ответов от сети            
@@ -504,13 +617,21 @@ static void ctrl_task(void *arg)
             retry = RETRY;//задать максимальное число повторов
             //окончание запросов
             if(array_member > number_slaves[0]) {
+                //вывод списка устройств сети на печать + передача mqtt
+                read_list_slaves();
+                array_member = 0;                
+                ordinal = 1;              
+                flag_mode = 8;//режим передачи данных профилей 
+                /*
                 //вывод списка и полученных профилей на печать
                 read_list_slaves();
+                read_infservice(namespase[htol(number)]);//профиль "мастера"
                 for(int i=1; i<=number_slaves[0]; i++) {
-                    read_prof_slave(namespase[number_slaves[i]]);
+                    read_infservice(namespase[number_slaves[i]]);
                 }
                 array_member = 1;
                 flag_mode = 0;
+                */
              }
             } else {                
                 printf("ERROR! Data loss\n");
@@ -525,6 +646,158 @@ static void ctrl_task(void *arg)
             }
           }
          }
+        }
+        //признак чтения сервиса подключенного к сети устройства
+        if(flag_mode == 13) {
+            //формирование запроса сервиса устройства сети
+            tx_message.tx_task_action = TX_QUERY_SERVICE;
+            tx_message.local_number = number_slaves[array_member];
+            tx_message.code_type = tabl_type[number_slaves[array_member]][ord_tab_type]+0x400;
+            //выставить запрос в очередь
+            xQueueSend(tx_task_que, &tx_message, portMAX_DELAY);
+            //ожидание получения семафора от задачи передачи сообщений в CAN
+            xSemaphoreTake(ctrl_task_sem, portMAX_DELAY);            
+            byfer_can[0][0] = 0;//обнулить счетчик приема кадров данных
+            byfer_can[0][1] = 0;// обнулить признак конца данных
+            flag_mode = 14;//признак ожидания данных от запрашиваемого сервиса
+        }
+				//признак режима передачи данных типов функциональности всех устройств сети
+				if(flag_mode == 16) {
+					uint8_t num_dev;//лок.номер устройства
+					//сервисы типа функциональности устройства "мастер"
+					if(array_member == 0) {
+						num_dev = htol(number);
+					} else {
+						//сервисы типа функциональности подчиненного устройства из списка
+						num_dev = number_slaves[array_member];
+					}
+					//получение количества типов функциональности для этого устройства
+					// из таблицы tabl_type[][] отбросив нулевые коды
+					uint8_t k;
+					for(k=8; k>0; k--) {
+						if(tabl_type[num_dev][k]!=0) break;
+					}
+					uint8_t n = num_dev; 
+ 					printf("tabl_type[%d]:%d,%d,%d,%d,%d,%d,%d,%d,%d\n",n,tabl_type[n][0],
+ 					tabl_type[n][1],tabl_type[n][2],tabl_type[n][3],tabl_type[n][4],
+					tabl_type[n][5],tabl_type[n][6],tabl_type[n][7],tabl_type[n][8]);    
+					printf("k: %d\n", k);
+      		//запрос начинается с последнего кода сервиса
+      		ord_tab_type = k;						
+					ordinal = 1;
+					sum_par = 8;//априори
+					flag_mode = 9;
+				}
+        //признак режима передачи данных типов функциональности устройствa
+        if(flag_mode == 9) {
+					uint8_t num_dev;//лок.номер устройства
+					uint8_t num_type;//порядковый номер типа в перечне профиля устройства
+					//сервисы типа функциональности устройства "мастер"
+					if(array_member == 0) {
+						num_dev = htol(number);
+					} else {
+						//сервисы типа функциональности подчиненного устройства из списка
+						num_dev = number_slaves[array_member];
+					}
+					num_type = ord_tab_type;
+					printf("ord_tab_type: %d\n", ord_tab_type);
+					printf("ordinal: %d\n", ordinal);
+					printf("sum_par: %d\n", sum_par);
+					//формирование топиков имен сервиса
+					if(ordinal<=3) {
+						data_service_on_mqtt(num_dev,num_type,'n', ordinal);
+					}										
+					if((ordinal>3)&&(ordinal<=(sum_par+4))) {
+						//формирование топиков имен параметров
+						data_service_on_mqtt(num_dev,num_type,'t', ordinal-3);
+					}
+					if((ordinal>(sum_par+4))&&(ordinal<=(2*sum_par+4))) {
+  					//формирование топиков величин параметров
+  					data_service_on_mqtt(num_dev,num_type,'p', ordinal-(sum_par+4));
+					}
+					if(ordinal>(2*sum_par+3)) {
+						ordinal = 0;
+						sum_par = 8;
+						ord_tab_type--;
+						if(ord_tab_type<=0) {
+							array_member++;
+							flag_mode = 16;
+						}
+					}
+					vTaskDelay(2);//1 тик = 10мс
+					ordinal++;
+					if(array_member>number_slaves[0]) {//окончание опроса
+                        //формирование разрешения событий в CAN
+                        tx_message.tx_task_action = TX_EVENT_YES;
+                        //выставить запрос в очередь
+                        xQueueSend(tx_task_que, &tx_message, portMAX_DELAY);
+                //ожидание получения семафора от задачи передачи сообщений в CAN
+                        xSemaphoreTake(ctrl_task_sem, portMAX_DELAY);            
+						flag_mode = 0;
+					}
+				}
+        //признак ожидания данных от запрашиваемого сервиса
+        if(flag_mode == 14) {
+          //если истекло максимальное время ответов от сети            
+          if(twai_read_alerts(&alerts,
+            pdMS_TO_TICKS((WAIT_CAN*SIZE_PAUSE)/BAUD_RATE))==ESP_ERR_TIMEOUT) {
+            if(byfer_can[0][0]==0) {//не получены данные
+               retry--;
+                if(retry==0) {
+                    printf("ERROR! Device lok.number %d, type %X no ping\n",
+                         number_slaves[array_member],
+												 tabl_type[number_slaves[array_member]][ord_tab_type]);
+                    gpio_set_level(LED_ALARM,1);//включить светодиод
+                    flag_mode = 0;//чтобы не было сбоя
+                } else flag_mode = 13;
+            } else {
+               printf("Service %X, device %d\n",
+								tabl_type[number_slaves[array_member]][ord_tab_type],
+                number_slaves[array_member]);
+                //проверка правильности полученных данных
+                if(true_data()) {
+                //запись информационного сервиса в память                   
+                init_service_slave(namespase[number_slaves[array_member]]);
+                ord_tab_type--;//следующий тип функциональности устройства
+                retry = RETRY;//задать максимальное число повторов
+                flag_mode = 13;
+                //окончание запросов типа для этого устройства
+                if(ord_tab_type<=0) {
+                    array_member++;
+                    //запрос следующего устройства если список устройств не закончился
+                    if(array_member<=number_slaves[0]) {
+                        flag_mode = 15;
+                    } else { //конец опроса устройств
+											//запись tabl_type[][] во флеш память
+											write_tabl_type_flash();
+                      array_member = 0;
+                      flag_mode = 16;												
+                    }                   
+                }
+             } else {
+                    printf("ERROR! Data loss\n");
+                    twai_clear_receive_queue();//очистить очередь приема TWAI
+                    retry--;
+                    if(retry<1) {//так и не получен профиль без сбоя
+                    gpio_set_level(LED_ALARM,1);//включить светодиод                 
+                    flag_mode = 0;//чтобы не было сбоя
+                    } else {
+                    flag_mode = 13;//запрос опять этого типа
+                    }                                
+                }
+              } 
+            }    
+        }
+        //признак запроса данных сервисов подчиненных устройств
+        if(flag_mode == 15) {
+            //локальный номер устройства
+            uint8_t loc_num_dev = number_slaves[array_member];
+            printf("Device number: %d\n", loc_num_dev);
+            //получение списка кодов типов для этого устройства ввиде строки таблицы "tabl_type[][]"
+            uint8_t k = list_type_device(loc_num_dev);
+            ord_tab_type = k;//запрос начинается с последнего кода сервиса
+            printf("ord_tab_type: %d\n", ord_tab_type);
+            flag_mode = 13;
         }
         //признак получения внешней команды
         if(flag_mode == 5) {
@@ -565,11 +838,20 @@ static void ctrl_task(void *arg)
             //ожидание получения семафора от задачи передачи сообщений в CAN
             xSemaphoreTake(ctrl_task_sem, portMAX_DELAY);
         }
+        //подтверждение исполнения команды от сценария
+        if(flag_mode == 12) {
+            // формированиe сообщения о изм.параметра для отправки в MQTT,
+            //а также запись изм. во флеш память
+            uint32_t identifier = (buf_proof[0]<<18) + htol(number);
+            uint8_t num_par = (buf_proof[1]>>16)&0xFF;
+            uint16_t val_par = buf_proof[1]&0xFFFF;
+            event_on_mqtt(identifier, num_par, val_par);
+            flag_mode = 0;
+        }
         if(!(alerts & TWAI_ALERT_RX_DATA)) vTaskDelay(1);//1 тик = 10мс
       }
       //ЕСЛИ УСТРОЙСТВО SLAVE
-      if(strcmp(obey,"master")!=0) 
-        {
+      if(strcmp(obey,"master")!=0) {
         //чтение сообщений от драйвера TWAI
         twai_read_alerts(&alerts,1);
         if(alerts & TWAI_ALERT_ABOVE_ERR_WARN) {
@@ -605,7 +887,7 @@ static void ctrl_task(void *arg)
         if(flag_mode == 3) {
             byfer_can[0][0] = 0;//обнулить счетчик кадров
             //прочитать из flash и занести в буфер CAN данные инф.сервиса
-            read_inf_service();
+            read_infservice_forcan();
             flag_mode = 4;//признак передачи инф.сервиса
             tx_message.tx_task_action = TX_ANSWER_SERVICE;
             tx_message.code_type = ID_MASTER_REVIEW;
@@ -635,6 +917,57 @@ static void ctrl_task(void *arg)
                 flag_mode = 0;
             }
         }
+        //если есть флаг передачи сервиса
+        if(flag_mode == 14) {
+            if(number_cadr<byfer_can[0][0]) {
+            tx_message.tx_task_action = TX_ANSWER_SERVICE;
+            tx_message.code_type = type_func + 0x400;
+            number_cadr = number_cadr + 1;
+            tx_message.number_cadr = number_cadr;            
+            //vTaskDelay(pdMS_TO_TICKS(12));//задержка
+            //vTaskDelay(1);//задержка, 1 тик = 10мс
+            //выставить запрос в очередь
+            xQueueSend(tx_task_que, &tx_message, portMAX_DELAY);
+            //ожидание получения семафора от задачи передачи сообщений в CAN
+            xSemaphoreTake(ctrl_task_sem, portMAX_DELAY);
+            } else {
+                printf("Service sent!\n");
+                twai_clear_receive_queue();//очистить очередь приема TWAI
+                flag_mode = 0;
+            }
+        }
+         //если есть флаг инициализации отправки сервиса
+         if(flag_mode == 13) {
+            byfer_can[0][0] = 0;//обнулить счетчик кадров                      
+            //прочитать из flash и занести в буфер CAN данные сервиса
+            read_service_forcan(type_func);
+            //flag_mode = 0;
+            tx_message.tx_task_action = TX_ANSWER_SERVICE;
+            tx_message.code_type = type_func + 0x400;
+            number_cadr = 1;
+            tx_message.number_cadr = number_cadr;
+            //выставить запрос в очередь
+            xQueueSend(tx_task_que, &tx_message, portMAX_DELAY);
+            //ожидание получения семафора от задачи передачи сообщений в CAN
+            xSemaphoreTake(ctrl_task_sem, portMAX_DELAY);
+            flag_mode = 14;//признак передачи сервиса
+         }
+        if(flag_mode == 12) {//подтверждение исполнения команды от сценария или от мастера
+            tx_message.tx_task_action = TX_CHANGE_PARAMETR;
+            tx_message.local_number = htol(number);//преобразование номера
+            tx_message.code_type = buf_proof[0];
+            tx_message.num_param = (buf_proof[1]>>16) & 0xFF;
+            tx_message.value_param = buf_proof[1] & 0xFFFF;       
+            //выставить запрос в очередь
+            xQueueSend(tx_task_que, &tx_message, portMAX_DELAY);
+            //ожидание получения семафора от задачи передачи сообщений в CAN
+            xSemaphoreTake(ctrl_task_sem, portMAX_DELAY);
+            flag_mode = 0;
+        }
+      }
+      if(flag_mode == 11) {//задержка исполнения
+        vTaskDelay(pdMS_TO_TICKS(2*WAIT_CAN/BAUD_RATE));        
+        flag_mode = 12;
       }
     }
     vTaskDelete(NULL);
