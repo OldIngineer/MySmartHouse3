@@ -20,17 +20,29 @@
 #include "app_priv.h"
 
 #define BUTTON_ACTIVE_LEVEL  0
+
+extern char number[3];//массив в котором хранится локальный номер устройства
 extern uint8_t flag_mode;
 extern uint32_t tab_param[8][9];//таблица параметров
 extern uint32_t param_change;//дискриптор флага изменения параметра
-extern uint8_t tab_type[0x400];//таблица типов функциональности
+extern uint16_t tabl_type[64][9];//таблица ячейки которой содержат код типа функциональности
+extern const char namespase[64][10];//Пространство имен устройств в nvs-памяти
 //Пространство имен для для записи сервиса функциональности устройства
 extern const char namespase_type[9][6];
+extern uint8_t flag_event;//флаг разрешения формирования событий в CAN от датчиков
 
 //при отпускании кнопки вызывается эта функция
     void push_btn_cb1p(void *arg)
     {   
-        uint8_t num = tab_type[0x0A0];       
+        uint8_t num;//порядковый номер типа функциональности как он указан в инф.сервисе
+        for(num=0; num<=9; num++) {
+            if(tabl_type[htol(number)][num] == 0x0A0) break;            
+        } 
+        if(num==9) return;//нет такого типа выход из п/п 
+        //цикл ожидания если запрет формирования событий или не режим ожидания
+        while((flag_event==0)||(flag_mode!=0)){
+            vTaskDelay(pdMS_TO_TICKS(EVENT_TIMEOUT_MS));
+        }
         flag_mode = 10;//изменение контролируемых сигналов на входе
         if(tab_param[num][1]==0) tab_param[num][1] = 1;
         else tab_param[num][1] = 0;
@@ -38,83 +50,57 @@ extern const char namespase_type[9][6];
          // - номер таблиц, мл.байт - № параметра       
         param_change = 1 + (num << 8) + (RETRY << 16);
     //запись новой величины параметра в nvs-память
-        //инициализация раздела флеш-памяти "profile"
-        nvs_flash_init_partition("profile");      
-      //открытие раздела флеш-памяти "profile" с пространством имен  типа "type*"
-        nvs_handle_t my_handle;    
-        nvs_open_from_partition("profile", namespase_type[num+1],
-            NVS_READWRITE, &my_handle);
         char str[8];//преобразование величины параметра в строку
         uint16_t val = tab_param[num][1] & 0xFFFF;
-        snprintf(str, sizeof str, "%X", val);
-        nvs_set_str(my_handle,"value1p", str);
-        nvs_commit(my_handle);//проверка записи в память
-        nvs_close(my_handle);//закрытие памяти
+        sprintf(str, "%X", val);
+        change_profile_nvs(htol(number),0x0A0,'p',1,str,1);
     }
     void push_btn_cb2p(void *arg)
     {    
-        uint8_t num = tab_type[0x0A0];       
+        uint8_t num;//порядковый номер типа функциональности как он указан в инф.сервисе
+        for(num=0; num<=9; num++) {
+            if(tabl_type[htol(number)][num] == 0x0A0) break;            
+        }
+        if(num==9) return;//нет такого типа выход из п/п 
+        //цикл ожидания если запрет формирования событий или не режим ожидания
+        while((flag_event==0)||(flag_mode!=0)){
+            vTaskDelay(pdMS_TO_TICKS(EVENT_TIMEOUT_MS));
+        }       
         flag_mode = 10;//изменение контролируемых сигналов на входе
         if(tab_param[num][2]==0) tab_param[num][2] = 1;
         else tab_param[num][2] = 0;        
         param_change = 2 + (num << 8) + (RETRY << 16);
-    //запись новой величины параметра в nvs-память
-        //инициализация раздела флеш-памяти "profile"
-        nvs_flash_init_partition("profile");      
-      //открытие раздела флеш-памяти "profile" с пространством имен  типа "type*"
-        nvs_handle_t my_handle;    
-        nvs_open_from_partition("profile", namespase_type[num+1],
-            NVS_READWRITE, &my_handle);
+        //запись новой величины параметра в nvs-память
         char str[8];//преобразование величины параметра в строку
         uint16_t val = tab_param[num][2] & 0xFFFF;
-        snprintf(str, sizeof str, "%X", val);
-        nvs_set_str(my_handle,"value2p", str);
-        nvs_commit(my_handle);//проверка записи в память
-        nvs_close(my_handle);//закрытие памяти
-        //printf("ky-ky 2p\n");
+        sprintf(str, "%X", val);
+        change_profile_nvs(htol(number),0x0A0,'p',2,str,1);
     }
 //Данная функция вызывается для инициализации входов/выходов и 
 //шаблона сервиса типа в nvs памяти
 void init_type_0A0(uint8_t num)
 {           
     //инициализация шаблона сервиса
+    //чтение сервиса типа функциональности из nvs-памяти в выделенные таблицы
     read_service_type(num);
     //запись типа функциональности
-    tab_param[num][0] = strtol("0A0", NULL, 16);//код типа
-//запись типа в память nvs
-    //инициализация раздела флеш-памяти "profile"
-    esp_err_t ret = nvs_flash_init_partition("profile");
-   //если не хватает памяти или ошибка при инициализации
-    if (ret==ESP_ERR_NVS_NO_FREE_PAGES||ret==ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ret = nvs_flash_erase_partition("profile");
-        /* Retry nvs_flash_init */
-        ret = nvs_flash_init_partition("profile");
-    }
-    if (ret != ESP_OK) {
-        printf("Failed to init NVS-profile");
-        return;
-    }    
-    //открытие раздела флеш-памяти "profile" с пространством имен  типа "type*"
-    nvs_handle_t my_handle; //   "type3"
-    ret = nvs_open_from_partition("profile", namespase_type[num+1],
-         NVS_READWRITE, &my_handle);
-    if (ret != ESP_OK) {
-            printf("Failed open NVS, error code: %i\n",ret);
-            return;
-        }
-    //запись в nvs-память
-    nvs_set_str(my_handle,"type_code", "0A0");
-    nvs_commit(my_handle);//проверка записи в память
-    nvs_close(my_handle);//закрытие памяти
+    //tab_param[num][0] = strtol("0A0", NULL, 16);//код типа
+    tab_param[num][0] = 0x0A0;//код типа
+    tabl_type[htol(number)][num] = 0x0A0;//запись типа функциональности
+    //запись типа в память nvs
+    char data[] = "0A0";
+    change_profile_nvs(htol(number),0x0A0,'n',1,data,1);
+    //запись признака окончания характеристик #
+    char name_param[] = "#";
+    change_profile_nvs(htol(number),0x0A0,'t',3,name_param,1);
     //инициализация входов
     //1 параметр 
     gpio_reset_pin(SIGN_H);
     gpio_set_direction(SIGN_H, GPIO_MODE_INPUT);
     //2 параметр
     gpio_reset_pin(SIGN_L);
-    gpio_set_direction(SIGN_L, GPIO_MODE_INPUT);
-    tab_type[0x0A0] = num;//запись номера таблиц обслуживания сервиса
+    gpio_set_direction(SIGN_L, GPIO_MODE_INPUT);    
+    tabl_type[htol(number)][num] = 0x0A0;//запись типа функциональности
     //==== программа обработки импульсного сигнала (кнопки) по входу =====    
     void configure_signal(int gpio_num, void (*btn_cb)(void *))
     {
