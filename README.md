@@ -183,6 +183,10 @@ CONFIG_MQTT_TRANSPORT_WEBSOCKET=y //установлено по умолчани
 
 CONFIG_MQTT_TRANSPORT_WEBSOCKET_SECURE=y //установлено по умолчанию
 
+//определяет тип флеш-памяти
+
+CONFIG_SPI_FLASH_SUPPORT_BOYA_CHIP=y
+
 ==============================================================
 
 ПРИМЕЧАНИЕ
