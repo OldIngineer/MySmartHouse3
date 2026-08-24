@@ -54,7 +54,8 @@ uint8_t flag_mode = 0;//флаг режима работы
     //признак чтения сервиса подключенного к сети устройства = 13;
     //признак ожидания/передачи данных от запрашиваемого сервиса = 14;
     //признак запроса данных сервисов подчиненных устройств = 15;
-		//признак режима передачи данных типов функциональности всех устройств сети=16;
+	//признак режима передачи данных типов функциональности всех устройств сети=16;
+    //признак формирования SMS через GSM-модуль = 17;
 
 uint8_t number_slaves[MAX_MEMBERS];//массив в котором хранятся локальные номера
          //подчиненных устройств, а в нулевой ячейке число подключенных устройств
@@ -125,6 +126,14 @@ uint8_t flag_cont = 0;//флаг внешнего соединения
 uint8_t ordinal;//порядковый номер (параметра, сценария, имени);
 uint8_t sum_par = 8;//сумма передаваемых параметров
 uint8_t flag_event = 1;//флаг разрешения формирования событий в CAN от датчиков
+//----------------GSM monitor -----------------------------------------
+uint8_t flag_msg = 0;//флаг сформированного сообщения в формате mqtt
+uint16_t subs[3] = {0, 0, 0};//коды подписки полученные через sms
+            //subs[0] - номерузла или 0xFF(все);
+            //subs[1] - код функции или 0xFF(все);
+            //subs[2] - номер параметра или 0xFF(все);
+char topic_on_sms[20];//строка топика для передачи через sms
+char data_on_sms[10];//строка данных для передачи через sms
 
 //объявление дескрипторов задач
 TaskHandle_t TaskHandleTwaiReceive = NULL;
@@ -176,7 +185,13 @@ static void twai_receive_task(void *arg)
             //блокировка на время получения сообщения                
                 twai_receive(&rx_msg, pdMS_TO_TICKS(WAIT_CAN/BAUD_RATE));
                 twai_clear_receive_queue ();//очистить очередь приема
-
+    /*
+    //полученные данные
+printf("identifier: %ld; data_len: %d; data[0...7]: [%d],[%d],[%d],[%d],[%d],[%d],[%d],[%d]\n"
+    ,rx_msg.identifier, rx_msg.data_length_code,
+     rx_msg.data[0], rx_msg.data[1], rx_msg.data[2], rx_msg.data[3],
+     rx_msg.data[4], rx_msg.data[5], rx_msg.data[6], rx_msg.data[7]);
+    */
         if((rx_msg.extd)&&(rx_msg.data_length_code == 3)&&
             (flag_mode==0)&&!rx_msg.rtr) { 
         uint64_t id =  rx_msg.identifier;      
@@ -184,8 +199,7 @@ static void twai_receive_task(void *arg)
                 (rx_msg.data[2] << 16) + (id << 24);                
         uint32_t ident = rx_msg.identifier;
         uint16_t val_par = rx_msg.data[0] + (rx_msg.data[1] << 8);
-        uint8_t n_cadr = rx_msg.data[2];
-
+        uint8_t n_cadr = rx_msg.data[2];        
         //если старший бит идентификатора =1 (изменение), 0 в 18р (признак записи) 
         if((rx_msg.identifier&0x10000000)&&!(rx_msg.identifier&0x20000)) {        
            // вызов функции изменения параметра
@@ -244,7 +258,7 @@ static void twai_receive_task(void *arg)
                 uint64_t ky = rx_msg.data[i];
                 data = data + (ky<<(i*8));
             }
-                //printf("data:%lld\n", data);
+                printf("data:%lld\n", data);
                 //вызов функции обработки
                 name_script_processing(kod_type,rx_msg.data_length_code,data);
             }
@@ -311,6 +325,7 @@ static void twai_receive_task(void *arg)
                 //сформировать сообщение для MQTT
                 uint16_t val_par = (rx_msg.data[1] << 8) + rx_msg.data[0];
                 event_on_mqtt(rx_msg.identifier, rx_msg.data[2], val_par);
+                printf("val_par: %d\n", val_par);
             }
         }
       }        
@@ -472,7 +487,7 @@ static void ctrl_task(void *arg)
         param_change = num_par + (num_type << 8) + (num_retry << 16);
         //если устройство мастер, отправить топик
         if(strcmp(obey,"master")==0) {
-            data_service_on_mqtt(htol(number), num_type, 'p', num_par);
+            data_service_on_mqtt(htol(number), num_type, 'p', num_par);            
         }
         vTaskDelay(1);//задержка, 1 тик = 10мс
         } else flag_mode = 0;
@@ -1049,7 +1064,10 @@ void app_main()
     #endif    
     esp_task_wdt_add(TaskHandleControl);//подписка задачи на сторожевой таймер
     uint32_t num = htol(number);//преобразование локального номера данного контроллера
-  if(num ==1) {//если лок.номер 1, устройство подключено к LAN        
+  if(num ==1) {//если лок.номер 1, устройство подключено к LAN 
+    //Запуск SMS modem    
+    init_sms_modem();
+    vTaskDelay(pdMS_TO_TICKS(WAIT_INIT_MODEM));//задержка на подключение GSM-модема       
     //Инициализация Ethernet driver
     uint8_t eth_port_cnt = 0;
     esp_eth_handle_t *eth_handles;
@@ -1080,10 +1098,10 @@ void app_main()
     // Запустить конечный автомат драйвера Ethernet
     for (int i = 0; i < eth_port_cnt; i++) {
         ESP_ERROR_CHECK(esp_eth_start(eth_handles[i]));
-    }
+    }    
     vTaskDelay(pdMS_TO_TICKS(WAIT_TAKE_IP));//задержка на получение адреса Ip     
     //Запуск mqtt client через соединение websocket security
-    mqtt_wss_client_task();
+    mqtt_wss_client_task();    
   }  
     //Инициализация интерфейса CAN
     init_CAN(CAN_TX,CAN_RX);
