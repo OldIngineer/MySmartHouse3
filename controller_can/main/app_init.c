@@ -69,8 +69,6 @@ void init_GPIO()
     gpio_set_direction(SPI_nINT, GPIO_MODE_INPUT);
     gpio_reset_pin(SPI_MISO);
     gpio_set_direction(SPI_MISO, GPIO_MODE_INPUT);
-    gpio_reset_pin(SIGNAL);
-    gpio_set_direction(SIGNAL, GPIO_MODE_INPUT);
 }
 //====Функция получения из инф.сервиса данных и 
     // конфигурирование устройства в связи с ними =======
@@ -548,9 +546,7 @@ void read_list_slaves()
     if(flag_cont==1) {
     //формирование информационного топика для MQTT,список устройств сети
     strcpy(topic_on, "inf/system");
-    //преобразовать лок.номер в десятичную строку    
-    sprintf(data_on, "%ld", htol(number));
-      
+    strcpy(data_on, number); 
     char *p;
     p = strchr(l_s, ',');//удалить строку до ","
     strcat(data_on, p);//объединить строки

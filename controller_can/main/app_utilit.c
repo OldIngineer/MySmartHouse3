@@ -163,7 +163,6 @@ char *change_profile_nvs(uint8_t num_div, uint16_t type,
       nvs_get_str(my_handle,namespace_name[ordinal],name,&required_size);
       strcpy(data, name);//копирование прочитанных данных
     }
-
   }
   if(theme == 'p') {//тип данных: 'p' параметр
     if(wr == 1) {

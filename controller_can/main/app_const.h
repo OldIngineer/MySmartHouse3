@@ -24,9 +24,11 @@
 #define RX_TASK_PRIO        8//приоритет задачи чтения сообщений
 #define TX_TASK_PRIO        9//приоритет задачи передачи сообщений
 #define CTRL_TSK_PRIO       10//приоритет задачи контроля
-#define TCPC_TSK_PRIO       7//приоритет задачи TCP-клиент
-#define WS_TSK_PRIO         6//приоритет задачи websocket client
-#define MWC_TSK_PRIO        5//приоритет задачи mqtt websocket secure client
+#define TCPC_TSK_PRIO       7//приоритет задачи TCP-клиент ???
+#define WS_TSK_PRIO         6//приоритет задачи websocket client ???
+#define MWC_TSK_PRIO        4//приоритет задачи mqtt websocket secure client
+#define SMS_MODEM_PRIO      5//приоритет задачи sms modem
+#define INF_SENSOR_TSK_PRIO 3//приоритет задачи информационных датчиков
 #define RETRY               3//число повторов при передаче по сети CAN
     //========= ВЫХОДЫ УПРАВЛЕНИЯ ==============
 #define LED_WORK    (GPIO_NUM_23)//управление светодиодом VD1 "РАБОТА", зел.
@@ -45,16 +47,25 @@
 #define SIGN_L      (GPIO_NUM_20)//входной сигнал управления, низкое напряжение
 #define SPI_nINT    (GPIO_NUM_7)// прерывание от модуля ETHERNET, лог.0
 #define SPI_MISO    (GPIO_NUM_0)// SPI вход данных от модуля ETHERNET
-#define SIGNAL      (GPIO_NUM_22)// сигнал от датчика температуры/влажности
+//========= ВХОД/ВЫХОД ДАТЧИКОВ ==============
+#define SIGNAL_DHT  (GPIO_NUM_22)// сигнал от датчика температуры/влажности
 //=========================================================================
-#define TWDT_TIMEOUT_MS        10000//период сторожевого таймера задач, ms
+#define TWDT_TIMEOUT_MS        15000//период сторожевого таймера задач, ms
 #define EVENT_TIMEOUT_MS        300//цикл задержки формирования событий от датчиков 
     //======== ETHERNET, TCP/IP
 #define SPI_CLOCK_MHZ           16//частота обмена по SPI в Мгц
 #define WAIT_TAKE_IP        8000//время задержки на получение адреса Ip от роутера
     //======= MQTT WSS CLIENT=======================
+//#define BROKER_URI  "wss://45.141.211.71:13108/wss"//адрес брокера mqtt
 #define BROKER_URI  "wss://m3.wqtt.ru:13108/wss"//адрес брокера mqtt
-#define USER_NAME   "user"//имя пользователя
-#define ID_CLIENT   "12345"//идентификационный номер клиента
-#define PASSWORD    "PassWord"//пароль
-
+#define USER_NAME   "u_RHHRIQ"//имя пользователя
+#define ID_CLIENT   "18150"//идентификационный номер клиента
+#define PASSWORD    "S3czh8Qp"//пароль
+    //================ UART1 GSM modem =================================
+#define TX_PIN      (GPIO_NUM_19)//выход передатчика данных
+#define RX_PIN      (GPIO_NUM_15)//вход приемника данных
+#define BUF_SIZE    512//размер буфера принимаемых данных
+#define TIME_SMS    5000//интервал задачи приема/передачи sms
+#define NUM_TEL     "+79384799076"// номер телефона куда отправляются SMS
+#define WAIT_INIT_MODEM 2000//пауза на инициализацию модема,мс
+    //===============================================

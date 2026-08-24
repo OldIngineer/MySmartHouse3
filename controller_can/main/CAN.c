@@ -149,33 +149,9 @@ void event_processing(uint64_t event)
                 event_on_mqtt(identifier, num_par, val_par);
             } else {
              //записать измененный параметр в nvs-память
-             //Функция записи/чтения в nvs-память измененых данных типа устройства, где:
-  //num_div - локальный номер устройства
-  //type - код типа ввиде шестнадцатиричного кода;
-  //theme - тип данных: 'p' параметр, 'n' имя; 's' сценарий;
-  //ordinal - порядковый номер (параметра, сценария, имени);
-  //data - данные которые надо записать/прочитать;
-  //wr - признак записи (1), чтения (0).
-//char *change_profile_nvs(uint8_t num_div, uint16_t type,
- //  char theme, uint8_t ordinal, char *data, uint8_t wr)
             char data[8];
-            sprintf(data, "%X", val_par); 
-         change_profile_nvs(htol(number), tab_param[i][0], 'p', num_par, data, 1); 
-/*
-         //инициализация раздела флеш-памяти "device[number]"
-         nvs_flash_init_partition(namespase[htol(number)]);      
- //открытие раздела флеш-памяти "device[number]" с пространством имен  типа "type*"
-         nvs_handle_t my_handle;    
-         nvs_open_from_partition(namespase[htol(number)], namespase_type[i+1],
-             NVS_READWRITE, &my_handle);
-         //преобразование величины параметра в строку
-         char str[8];
-         snprintf(str, sizeof str, "%X", val_par);
-         //запись в nvs-память
-         nvs_set_str(my_handle,namespace_value_par[num_par], str);
-         nvs_commit(my_handle);//проверка записи в память
-         nvs_close(my_handle);//закрытие памяти
-*/
+            sprintf(data, "%d", val_par); 
+            change_profile_nvs(htol(number), tab_param[i][0], 'p', num_par, data, 1); 
         }    
       }
     }
@@ -191,7 +167,7 @@ void com_processing(uint32_t identifier, uint16_t val_par, uint8_t n_cadr)
             char theme = 'p';
             uint8_t ordinal = (n_cadr - 4)/2;
             char datas[6];
-            snprintf(datas, sizeof datas, "%X", val_par);            
+            snprintf(datas, sizeof datas, "%d", val_par);            
             // выполнить команду и записать в память
             if(type_210_make(theme, ordinal, datas, numb)) {//при удачном выполнении
                 //сохранить в буфере подтверждения
@@ -205,39 +181,40 @@ void com_processing(uint32_t identifier, uint16_t val_par, uint8_t n_cadr)
 //===== Данная функция вызывается для обработки команды изменения имени или сценария ===
 void name_script_processing(uint16_t kod_type, uint8_t data_len, uint64_t data)
 {
-    //printf("kod_type:%d, data_len:%d, data:%lld\n", kod_type, data_len, data);
-    uint8_t num_cadr = (data>>((data_len-1))*8)&0xFF;//номер полученного кадра
-    //printf("num_cadr: %d\n", num_cadr);
-    if((num_cadr<17)||(num_cadr>=BEGIN_SCRIPT)) {//изменяется имя в сервисе или сценарий (два кадра)
-       if(num_cadr&1) {//первый кадр имени, нечетный
+  printf("kod_type:%d, data_len:%d, data:%lld\n", kod_type, data_len, data);
+  uint8_t num_cadr = (data>>((data_len-1))*8)&0xFF;//номер полученного кадра
+  printf("num_cadr: %d\n", num_cadr);
+	uint8_t num;//порядковый номер типа функциональности как он указан в инф.сервисе
+	for(num=0; num<=9; num++) {
+    if(tabl_type[htol(number)][num] == kod_type) break;                   
+	}
+	if(num==9) return;//нет такого типа выход из п/п
+  //если два кадра данных: сценарий; изменяется имя в инф.сервисе;
+												// изменяется имя в сервисе типа
+    if((num_cadr>=BEGIN_SCRIPT)||((kod_type==0)&&(3<num_cadr)&&(num_cadr<8))
+				||((kod_type!=0)&&(1<num_cadr)&&(num_cadr<6))) {
+      if(!(num_cadr&1)) {//первый кадр, четный
         for(int i=0; i<data_len-1; i++) {//запись кадра в буфер            
             byfer_can[num_cadr][i] = (data>>(i*8))&0xFF;
             }
+						byfer_can[num_cadr][7] = data_len -1;//длина данных, без номера кадра
             byfer_can[num_cadr][8] = num_cadr;//сохранение для проверки
-        } else {//иначе если второй кадр имени, четный
-            if((num_cadr-1)&&(byfer_can[num_cadr-1][8])) {//проверка
-              if(num_cadr<17) {//изменяется имя в сервисе
-                //восстановление строки
-
-              } else {//записывается сценарий
+        } else {//иначе если второй кадр,нечетный
+            if((num_cadr-1)==(byfer_can[num_cadr-1][8])) {//проверка
                 uint64_t data_rem = 0;
-                for(int i=0; i<7; i++) {//восстановление кадра
+                for(int i=0; i<byfer_can[num_cadr-1][7]; i++) {//восстановление 1-го кадра
                 uint64_t ky = byfer_can[num_cadr-1][i];
                 data_rem = data_rem + (ky<<(i*8));
                 }
-                uint8_t num;//порядковый номер типа функциональности как он указан в инф.сервисе
-                for(num=0; num<=9; num++) {
-                    if(tabl_type[htol(number)][num] == kod_type) break;                   
-                }
-                if(num==9) return;//нет такого типа выход из п/п
-                
+						//сценарий
+                if(num_cadr>=BEGIN_SCRIPT) { 
                 uint8_t ord = (num_cadr-(BEGIN_SCRIPT-1))/2;//порядковый номер сценария
                 //запись в таблицу событий
                 tab_event[num][ord] = data_rem;
-                //printf("data_rem:%lld\n", data_rem);
+                printf("data_rem:%lld\n", data_rem);
                 //запись в таблицу исполнения
                 tab_make[num][ord] = data&0xFFFFFF;
-                //printf("tab_make[%d][%d]:%ld\n", num, ord, tab_make[num][ord]);
+                printf("tab_make[%d][%d]:%ld\n", num, ord, tab_make[num][ord]);
                 //запись во флеш-память
                 char str_script[30] = "event:";//строка сценария
                 char str_cod_event[20]; 
@@ -248,11 +225,45 @@ void name_script_processing(uint16_t kod_type, uint8_t data_len, uint64_t data)
                 sprintf(str_cod_make, "%lX", tab_make[num][ord]);
                 strcat(str_script, str_cod_make);
                 change_profile_nvs(htol(number), kod_type, 's', ord, str_script, 1);
-              }
-            }
-        } 
-    } 
-    if((num_cadr>16)&&(num_cadr<65)) {//изменяется наименование параметра (один кадр)
-
-    }
+              } else {
+						//изменяется имя в сервисе
+							char str_name[15] = "";
+							uint8_t len1 = byfer_can[num_cadr-1][7];//длина 1 части имени
+							uint8_t len = byfer_can[num_cadr-1][7] + (data_len - 1);//длина имени
+								for(int i=0; i<len1; i++) {
+									str_name[i] = byfer_can[num_cadr-1][len1-1-i];
+								}								
+								for(int i=len1; i<len; i++) {
+									str_name[i] = (data>>((len-1-i)*8))&0xFF;
+								}
+								//str_name[len+1] = '\0';
+								//printf("name: %s\n", str_name);
+								//запись во flash-память
+								uint8_t ordi = 0;
+								if(kod_type==0) {//инф.сервис
+									if((num_cadr-1)==4) ordi = 4;//изм. наимен. устройства
+									if((num_cadr-1)==6) ordi = 5;//изм. пользоват. имени
+								}
+								if(kod_type!=0) {//сервис типа
+									if((num_cadr-1==2)) ordi = 2;//изм. наименования типа
+									if((num_cadr-1)==4) ordi = 3;//изм. пользоват. имени
+								}
+								if(ordi!=0) {//запись во флеш-память
+								change_profile_nvs(htol(number), kod_type, 'n', ordi, str_name, 1);
+								}
+							}
+						}
+					}
+        }     
+  //если изменяется наименование параметра(один кадр)
+	if((kod_type!=0)&&(5<num_cadr)&&(num_cadr<BEGIN_SCRIPT)) {
+		char name_par[8] = "";
+		for(int i=0; i<data_len-1; i++) {
+			name_par[i] = (data>>((data_len-2-i)*8))&0xFF;
+		}		
+		//запись во флеш-память
+		uint8_t ord = (num_cadr - 4)/2;
+		change_profile_nvs(htol(number), kod_type, 't', ord, name_par, 1);
+	}		
 }
+    

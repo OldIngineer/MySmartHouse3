@@ -1,4 +1,4 @@
-idf_component_register(SRCS "app_main.c"
+idf_component_register(SRCS "sms.c" "app_main.c"
 				"app_init.c"
 				"ethernet.c"
 				"app_utilit.c"
@@ -12,6 +12,7 @@ idf_component_register(SRCS "app_main.c"
 				"TYPE_0A0.c"
 				"TYPE_210.c"
 				"TYPE_220.c"
-	        INCLUDE_DIRS "."
-			EMBED_TXTFILES 
+				"sms.c"				
+	                INCLUDE_DIRS "."
+			EMBED_TXTFILES 				
 				"certs/wqtt.pem")

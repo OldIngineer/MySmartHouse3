@@ -52,7 +52,7 @@ extern uint8_t flag_event;//флаг разрешения формировани
     //запись новой величины параметра в nvs-память
         char str[8];//преобразование величины параметра в строку
         uint16_t val = tab_param[num][1] & 0xFFFF;
-        sprintf(str, "%X", val);
+        sprintf(str, "%d", val);
         change_profile_nvs(htol(number),0x0A0,'p',1,str,1);
     }
     void push_btn_cb2p(void *arg)
@@ -73,7 +73,7 @@ extern uint8_t flag_event;//флаг разрешения формировани
         //запись новой величины параметра в nvs-память
         char str[8];//преобразование величины параметра в строку
         uint16_t val = tab_param[num][2] & 0xFFFF;
-        sprintf(str, "%X", val);
+        sprintf(str, "%d", val);
         change_profile_nvs(htol(number),0x0A0,'p',2,str,1);
     }
 //Данная функция вызывается для инициализации входов/выходов и 

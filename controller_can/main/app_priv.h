@@ -45,3 +45,4 @@ void init_service_slave(const char *slave_n);
 uint8_t list_type_device(uint8_t loc_num_dev);
 void write_tabl_type_flash();
 void read_tabl_type_flash();
+void init_sms_modem();

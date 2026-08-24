@@ -81,7 +81,7 @@ int type_210_make(char theme, uint32_t ordinal, char *datas, uint8_t num)
 {    
     if((theme == 'p')&&(ordinal < 3)) {
         uint8_t dat = 0;
-        if(htol(datas) > 0) dat = 1;
+        if(atoi(datas) > 0) dat = 1;
         if(ordinal == 1) {//управление 1 реле
           gpio_set_level(RELAY_1, dat);          
         }
