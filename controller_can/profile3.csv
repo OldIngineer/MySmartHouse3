@@ -3,17 +3,17 @@ key,type,encoding,value
 d_inf,namespace,,
 #===ИНФОРМАЦИОННЫЙ СЕРВИС====
 #номер устройства в локальной сети CAN
-number,data,string,"03"
+name1,data,string,"03"
 #Серийный номер устройства				
-s/n,data,string,"00003"
+name2,data,string,"00003"
 #Подчиненность
-obey,data,string,"slave_"
+name3,data,string,"slave_"
 #наименование контроллера
-name_d,data,string,"device_three"
+name4,data,string,"device_three"
 #присвоенное имя пользователем
-place,data,string,"bedroom_door"
+name5,data,string,"bedroom_door"
 #версия программы
-v_program,data,string,"v1"
+name6,data,string,"v1"
 #перечисление функциональных типов
-type_c,data,string,"070 210 0A0 220#"
+name7,data,string,"070 210 0A0 220#"
 #==================================
