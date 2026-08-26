@@ -58,14 +58,14 @@
     //======= MQTT WSS CLIENT=======================
 //#define BROKER_URI  "wss://45.141.211.71:13108/wss"//адрес брокера mqtt
 #define BROKER_URI  "wss://m3.wqtt.ru:13108/wss"//адрес брокера mqtt
-#define USER_NAME   "u_RHHRIQ"//имя пользователя
-#define ID_CLIENT   "18150"//идентификационный номер клиента
-#define PASSWORD    "S3czh8Qp"//пароль
+#define USER_NAME   "u_XXXXXX"//имя пользователя
+#define ID_CLIENT   "XXXXX"//идентификационный номер клиента
+#define PASSWORD    "XXXXXXXX"//пароль
     //================ UART1 GSM modem =================================
 #define TX_PIN      (GPIO_NUM_19)//выход передатчика данных
 #define RX_PIN      (GPIO_NUM_15)//вход приемника данных
 #define BUF_SIZE    512//размер буфера принимаемых данных
 #define TIME_SMS    5000//интервал задачи приема/передачи sms
-#define NUM_TEL     "+79384799076"// номер телефона куда отправляются SMS
+#define NUM_TEL     "+7XXXXXXXXXX"// номер телефона куда отправляются SMS
 #define WAIT_INIT_MODEM 2000//пауза на инициализацию модема,мс
     //===============================================
