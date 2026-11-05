@@ -46,3 +46,6 @@ uint8_t list_type_device(uint8_t loc_num_dev);
 void write_tabl_type_flash();
 void read_tabl_type_flash();
 void init_sms_modem();
+void ethernet_tcp_init(void);
+void init_gsm_modem_tcp();
+void gsm_modem_manager_task();
