@@ -77,6 +77,7 @@ nvs-память.
 отведенные для устройств разделы nvs-памяти.
  
 **Состав программы**
+
 	Программа состоит из нескольких программных блоков:
 - "app_main.c" главная программа, объединяющая все другие програмные блоки.
 - "app_const.h" файл где указаны константы устанавливаемые перед компиляцией. Для оперативного изменения
@@ -186,6 +187,18 @@ CONFIG_MQTT_TRANSPORT_WEBSOCKET_SECURE=y //установлено по умол�
 //определяет тип флеш-памяти
 
 CONFIG_SPI_FLASH_SUPPORT_BOYA_CHIP=y
+
+//нижеперечисленное относится к компоненту ESP-MODEM(GSMmodem)
+
+//(переопределить значения по умолчанию для включения РРР)
+
+CONFIG_LWIP_PPP_SUPPORT=y
+CONFIG_LWIP_PPP_NOTIFY_PHASE_SUPPORT=y
+CONFIG_LWIP_PPP_PAP_SUPPORT=y
+CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=4096
+CONFIG_LWIP_PPP_ENABLE_IPV6=n
+CONFIG_COMPILER_CXX_EXCEPTIONS=y//вкл.поддержка С++
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192//увеличить в 2 раза раз.стека главной задачи (app.main) 
 
 ==============================================================
 
