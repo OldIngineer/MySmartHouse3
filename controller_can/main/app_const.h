@@ -1,3 +1,6 @@
+//=======ТРАНСПОРТНЫЙ КАНАЛ ДЛЯ ПЕРЕДАЧИ ЦИФРОВЫХ ДАННЫХ============
+#define TDTC    2//1 - передачa данных по Ethernet протокол TCP/IP
+                //2 - передачa данных по GSM-модему протокол TCP/IP&PPPoS
 //=============CAN=========================
 #define CAN_TX      GPIO_NUM_2// выход данных
 #define CAN_RX      GPIO_NUM_3// вход данных
@@ -24,10 +27,9 @@
 #define RX_TASK_PRIO        8//приоритет задачи чтения сообщений
 #define TX_TASK_PRIO        9//приоритет задачи передачи сообщений
 #define CTRL_TSK_PRIO       10//приоритет задачи контроля
-#define TCPC_TSK_PRIO       7//приоритет задачи TCP-клиент ???
-#define WS_TSK_PRIO         6//приоритет задачи websocket client ???
-#define MWC_TSK_PRIO        4//приоритет задачи mqtt websocket secure client
-#define SMS_MODEM_PRIO      5//приоритет задачи sms modem
+#define MWC_TSK_PRIO        5//приоритет задачи mqtt websocket secure client
+#define SMS_MODEM_PRIO      4//приоритет задачи sms modem
+#define GSM_MODEM_PRIO      4//приоритет задачи gsm mode
 #define INF_SENSOR_TSK_PRIO 3//приоритет задачи информационных датчиков
 #define RETRY               3//число повторов при передаче по сети CAN
     //========= ВЫХОДЫ УПРАВЛЕНИЯ ==============
@@ -42,6 +44,7 @@
 #define nSS         (GPIO_NUM_5)//выбор модуля ETHERNET, лог.0
 #define nRESET      (GPIO_NUM_1)//сброс модуля ETHERNET, лог.0
 //========== ВХОДЫ УПРАВЛЕНИЯ ================
+#define RESET_MODEM  (GPIO_NUM_8)//сброс GSM-модема, лог.0
 #define INIT        (GPIO_NUM_9)//вход для кнопки SB2
 #define SIGN_H      (GPIO_NUM_21)//входной сигнал управления, высокое напряжение
 #define SIGN_L      (GPIO_NUM_20)//входной сигнал управления, низкое напряжение
@@ -50,7 +53,7 @@
 //========= ВХОД/ВЫХОД ДАТЧИКОВ ==============
 #define SIGNAL_DHT  (GPIO_NUM_22)// сигнал от датчика температуры/влажности
 //=========================================================================
-#define TWDT_TIMEOUT_MS        15000//период сторожевого таймера задач, ms
+#define TWDT_TIMEOUT_MS        60000//период сторожевого таймера задач, ms
 #define EVENT_TIMEOUT_MS        300//цикл задержки формирования событий от датчиков 
     //======== ETHERNET, TCP/IP
 #define SPI_CLOCK_MHZ           16//частота обмена по SPI в Мгц
@@ -58,14 +61,21 @@
     //======= MQTT WSS CLIENT=======================
 //#define BROKER_URI  "wss://45.141.211.71:13108/wss"//адрес брокера mqtt
 #define BROKER_URI  "wss://m3.wqtt.ru:13108/wss"//адрес брокера mqtt
-#define USER_NAME   "u_XXXXXX"//имя пользователя
-#define ID_CLIENT   "XXXXX"//идентификационный номер клиента
-#define PASSWORD    "XXXXXXXX"//пароль
+//#define BROKER_PING "ping m3.wqtt.ru"//проверка доступности брокера mqtt
+#define BROKER_PING "45.141.211.71"//проверка доступности брокера mqtt
+#define USER_NAME   "u_RHHRIQ"//имя пользователя
+#define ID_CLIENT   "18150"//идентификационный номер клиента
+#define PASSWORD    "S3czh8Qp"//пароль
+#define WAIT_BETWEEN_PROF_DEV   2000//период ожидания между отправкой профилей
+                            //устройств в потоке, чтобы не переполнился буфер,мс
     //================ UART1 GSM modem =================================
 #define TX_PIN      (GPIO_NUM_19)//выход передатчика данных
 #define RX_PIN      (GPIO_NUM_15)//вход приемника данных
-#define BUF_SIZE    512//размер буфера принимаемых данных
+#define BUF_SIZE    512//размер буфера принимаемых/передаваемых данных sms
 #define TIME_SMS    5000//интервал задачи приема/передачи sms
-#define NUM_TEL     "+7XXXXXXXXXX"// номер телефона куда отправляются SMS
-#define WAIT_INIT_MODEM 2000//пауза на инициализацию модема,мс
+#define NUM_TEL     "+79384799076"// номер телефона куда отправляются SMS
+#define WAIT_INIT_MODEM 2000//пауза на инициализацию модема для sms,мс
+#define APN         "internet" //точка доступа сотового оператора
+#define TIME_CYCLE   60000//интервал основного цикла управления GSM modem, ms
+#define WAIT_PPP    5000//интервал ожидания установления канала PPP, ms
     //===============================================
